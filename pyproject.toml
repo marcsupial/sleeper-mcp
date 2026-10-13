@@ -6,8 +6,10 @@ requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
+    "anyio>=4.9",
     "httpx>=0.28.1",
     "mcp>=2.3.0",
+    "pydantic>=2.12",
 ]
 
 [project.scripts]
@@ -19,6 +21,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4.25",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "respx>=0.23.1",
