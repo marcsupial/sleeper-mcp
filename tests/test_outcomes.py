@@ -280,6 +280,22 @@ async def test_unusable_players_keeps_weekly_facts(tmp_path: Path, players: Any)
     assert result.context.view_comparison.membership_states["P2"] == "unknown"
 
 
+async def test_category_id_outside_players_makes_membership_partial(tmp_path: Path) -> None:
+    # IMPL-B01: a current starter missing from players means players may be incomplete, so
+    # no weekly starter outside players can be called absent.
+    world = World()
+    world.rosters[0]["players"].remove("P1")
+    result, _ = await run(world, tmp_path)
+    assert result.outcome == "partial"
+    assert result.context is not None
+    roster = result.context.roster
+    assert roster.coverage.membership == "partial"
+    assert roster.coverage.placement == "partial"
+    assert {"invalid_source_data", "placement_conflict"} <= set(reasons(result))
+    assert result.context.view_comparison.membership_states["P1"] == "unknown"
+    assert "weekly_player_not_in_current_roster" not in reasons(result)
+
+
 async def test_explicit_positive_with_sibling_defect_stays_complete(tmp_path: Path) -> None:
     world = World()
     world.rosters = [roster_row(), {**other_row(), "owner_id": 12345}]

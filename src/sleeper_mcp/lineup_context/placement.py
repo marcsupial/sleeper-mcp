@@ -151,6 +151,9 @@ def evaluate_placement(
     extras = {
         key: sorted(values - member_set) for key, values in groups.items() if values - member_set
     }
+    if extras:
+        # IMPL-B01: categories contradict `players`, so it may be incomplete
+        membership_complete = False
     names = list(groups)
     conflicts: set[str] = set()
     for i, first in enumerate(names):
