@@ -526,7 +526,9 @@ async def _run(runtime: Runtime, arguments: dict[str, RawArgument]) -> LineupCon
                 directory_origin=directory.observation.origin if directory.observation else None,
                 applicability_basis=(
                     "Profiles are the current directory observation; they apply to the target "
-                    "week only when it is the provider-observed current week."
+                    "week only when the week was selected automatically as the provider-observed "
+                    "current week. An explicit week stays unknown, even when it equals the "
+                    "current week, because explicit weeks do not read NFL state."
                 ),
                 historical_eligibility="not_established",
             ),
