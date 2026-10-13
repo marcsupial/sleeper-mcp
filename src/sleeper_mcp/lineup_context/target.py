@@ -380,15 +380,15 @@ def evaluate_league(
             if is_id_string_list(positions)
             else None
         )
-        # IMPL-B01: a present configuration that cannot be read leaves the scope guard
-        # unevaluated, so the call stops. A readable BN-only list is evaluated and differs.
-        if starting is None or not positions:
+        # IMPL-B01: a present configuration without starting slots leaves the scope guard
+        # unevaluated, so the call stops. BN-only counts as malformed, as in A05 and A09.
+        if starting is None or not starting:
             guard(
                 "starting_configuration_matches", expected_configuration, "roster_positions", None
             )
             return invalid(
-                "roster_positions is not a nonempty array of slot labels, so the supported "
-                "starting configuration cannot be confirmed.",
+                "roster_positions is not an array of slot labels with at least one starting "
+                "slot, so the supported starting configuration cannot be confirmed.",
                 "roster_positions",
             )
         ok = starting == expected_configuration

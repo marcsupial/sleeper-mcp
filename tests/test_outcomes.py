@@ -147,7 +147,7 @@ def configuration_guard(result: Any) -> Any:
     return next(g for g in guards if g.name == "starting_configuration_matches")
 
 
-@pytest.mark.parametrize("positions", [[], {}, "QB", ["QB", None], ["QB", 1, "BN"]])
+@pytest.mark.parametrize("positions", [[], ["BN", "BN"], {}, "QB", ["QB", None], ["QB", 1, "BN"]])
 async def test_malformed_configuration_is_an_error(tmp_path: Path, positions: Any) -> None:
     world = World()
     world.league["roster_positions"] = positions
@@ -157,15 +157,6 @@ async def test_malformed_configuration_is_an_error(tmp_path: Path, positions: An
     assert result.context is None
     assert configuration_guard(result).result == "invalid"
     assert result.issues[0].retryable is None
-
-
-async def test_bench_only_configuration_is_unsupported(tmp_path: Path) -> None:
-    world = World()
-    world.league["roster_positions"] = ["BN", "BN"]
-    result, _ = await run(world, tmp_path)
-    assert result.outcome == "error"
-    assert reasons(result) == ["unsupported_scope"]
-    assert configuration_guard(result).result == "fail"
 
 
 async def test_previous_league_id_is_never_followed(tmp_path: Path) -> None:
