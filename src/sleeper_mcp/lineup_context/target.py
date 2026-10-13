@@ -134,7 +134,7 @@ class LeagueResult:
     evidence: LeagueEvidence
     issues: list[IssueSpec]
     league: JsonObject | None
-    configuration_status: Literal["mapped", "unavailable", "invalid", "not_evaluated"]
+    configuration_status: Literal["mapped", "unavailable", "not_evaluated"]
 
     @property
     def resolved(self) -> bool:
@@ -172,9 +172,7 @@ def evaluate_league(
         issues: list[IssueSpec],
         league: JsonObject | None = None,
         observed_body: bool = True,
-        configuration: Literal["mapped", "unavailable", "invalid", "not_evaluated"] = (
-            "not_evaluated"
-        ),
+        configuration: Literal["mapped", "unavailable", "not_evaluated"] = ("not_evaluated"),
     ) -> LeagueResult:
         body = obs.body if obs.ok else None
         data = None
@@ -358,7 +356,7 @@ def evaluate_league(
     # Starting configuration (A05).
     positions = league.get("roster_positions")
     issues: list[IssueSpec] = []
-    configuration: Literal["mapped", "unavailable", "invalid", "not_evaluated"] = "mapped"
+    configuration: Literal["mapped", "unavailable", "not_evaluated"] = "mapped"
     expected_configuration = list(target.starting_configuration)
     if positions is None:
         configuration = "unavailable"
@@ -382,38 +380,23 @@ def evaluate_league(
             if is_id_string_list(positions)
             else None
         )
-        if starting is None or not positions or not starting:
-            configuration = "invalid"
+        # IMPL-B01: a present configuration that cannot be read leaves the scope guard
+        # unevaluated, so the call stops. A readable BN-only list is evaluated and differs.
+        if starting is None or not positions:
             guard(
                 "starting_configuration_matches", expected_configuration, "roster_positions", None
             )
-            issues.extend(
-                [
-                    IssueSpec(
-                        reason="slot_mapping_unavailable",
-                        severity="limitation",
-                        explanation="roster_positions is malformed, so slots cannot be mapped.",
-                        affected=[("field", "league.roster_positions"), ("source", obs.id)],
-                        next_action=("review_evidence", [], [obs.id]),
-                        retryable=None,
-                    ),
-                    IssueSpec(
-                        reason="invalid_source_data",
-                        severity="limitation",
-                        explanation="roster_positions is not a nonempty array of slot labels.",
-                        affected=[("field", "league.roster_positions"), ("source", obs.id)],
-                        next_action=("review_evidence", [], [obs.id]),
-                        retryable=None,
-                    ),
-                ]
+            return invalid(
+                "roster_positions is not a nonempty array of slot labels, so the supported "
+                "starting configuration cannot be confirmed.",
+                "roster_positions",
             )
-        else:
-            ok = starting == expected_configuration
-            guard("starting_configuration_matches", expected_configuration, "roster_positions", ok)
-            if not ok:
-                return unsupported(
-                    "The league's starting configuration differs from the supported configuration "
-                    "for this league.",
-                    "roster_positions",
-                )
+        ok = starting == expected_configuration
+        guard("starting_configuration_matches", expected_configuration, "roster_positions", ok)
+        if not ok:
+            return unsupported(
+                "The league's starting configuration differs from the supported configuration "
+                "for this league.",
+                "roster_positions",
+            )
     return result("resolved", issues, league, configuration=configuration)

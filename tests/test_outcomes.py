@@ -141,12 +141,30 @@ async def test_missing_configuration_is_partial_slot_mapping(
     assert [a.raw for a in weekly.assignments] == STARTERS
 
 
-async def test_malformed_configuration_is_partial_and_invalid(tmp_path: Path) -> None:
+def configuration_guard(result: Any) -> Any:
+    guards = result.resolution_evidence.league.scope.guards
+    return next(g for g in guards if g.name == "starting_configuration_matches")
+
+
+@pytest.mark.parametrize("positions", [[], {}, "QB", ["QB", None], ["QB", 1, "BN"]])
+async def test_malformed_configuration_is_an_error(tmp_path: Path, positions: Any) -> None:
     world = World()
-    world.league["roster_positions"] = ["QB", 1, "BN"]
+    world.league["roster_positions"] = positions
     result, _ = await run(world, tmp_path)
-    assert result.outcome == "partial"
-    assert reasons(result)[:2] == ["slot_mapping_unavailable", "invalid_source_data"]
+    assert result.outcome == "error"
+    assert reasons(result) == ["invalid_source_data"]
+    assert result.context is None
+    assert configuration_guard(result).result == "invalid"
+    assert result.issues[0].retryable is None
+
+
+async def test_bench_only_configuration_is_unsupported(tmp_path: Path) -> None:
+    world = World()
+    world.league["roster_positions"] = ["BN", "BN"]
+    result, _ = await run(world, tmp_path)
+    assert result.outcome == "error"
+    assert reasons(result) == ["unsupported_scope"]
+    assert configuration_guard(result).result == "fail"
 
 
 async def test_previous_league_id_is_never_followed(tmp_path: Path) -> None:
