@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environment (managed by uv)
+.venv/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+
+# Local Sleeper responses and caches (may contain real user data)
+.cache/
+*.local.json
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
