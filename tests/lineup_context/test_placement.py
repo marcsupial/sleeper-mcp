@@ -140,3 +140,9 @@ def test_zero_in_players_prevents_complete_membership() -> None:
     result = evaluate(players=["S1", "S2", "S3", "B1", "R1", "T1", "0"])
     assert result.membership_coverage == "partial"
     assert "0" not in (result.data.members or [])
+
+
+def test_malformed_starters_is_invalid_even_without_configuration() -> None:
+    result = evaluate_placement(row(starters=1), None, "7", "src-rosters")
+    assert "invalid_source_data" in reasons(result)
+    assert result.data.bench_ids is None

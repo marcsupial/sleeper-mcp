@@ -134,6 +134,13 @@ def test_explicit_positive_survives_sibling_defects_as_a_notice() -> None:
     assert [(i.reason, i.severity) for i in result.issues] == [("invalid_source_data", "notice")]
 
 
+def test_malformed_field_on_the_selected_row_is_a_notice() -> None:
+    result = evaluate([row(7, U, co_owners=["other", None]), row(8)], explicit=7)
+    assert result.status == "selected"
+    assert [(i.reason, i.severity) for i in result.issues] == [("invalid_source_data", "notice")]
+    assert ("roster", "7") in result.issues[0].affected
+
+
 def test_explicit_positive_with_unknown_enumeration_is_selected() -> None:
     result = evaluate([row(7, U), row(8)], total=9, explicit=7)
     assert result.status == "selected"

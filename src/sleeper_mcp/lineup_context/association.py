@@ -241,19 +241,20 @@ def evaluate_association(
     unknown_rows = sorted(rid for rid, s in states.items() if s.unknown and not s.invalid)
     all_known = not invalid_rows and not unknown_rows
 
-    def sibling_notice(selected: int) -> list[IssueSpec]:
-        others = [rid for rid in invalid_rows if rid != selected]
-        if not others:
+    def defect_notice() -> list[IssueSpec]:
+        # Malformed association fields stay visible even when a valid positive field on the
+        # selected row carries the explicit selection (A02).
+        if not invalid_rows:
             return []
         return [
             IssueSpec(
                 reason="invalid_source_data",
                 severity="notice",
                 explanation=(
-                    "Other roster rows have malformed owner_id or co_owners values. The explicit "
+                    "Some roster rows have malformed owner_id or co_owners values. The explicit "
                     "positive selection stands; uniqueness across rosters is not claimed."
                 ),
-                affected=[("roster", str(rid)) for rid in others] + [("source", source_id)],
+                affected=[("roster", str(rid)) for rid in invalid_rows] + [("source", source_id)],
                 next_action=None,
                 retryable=None,
             )
@@ -270,7 +271,7 @@ def evaluate_association(
                 if enumeration_complete and all_known
                 else "unknown"
             )
-            return finish("selected", sibling_notice(rid), rid, "explicit_roster_id", uniqueness)
+            return finish("selected", defect_notice(), rid, "explicit_roster_id", uniqueness)
         if selected is not None and selected.invalid:
             return finish(
                 "invalid_source_data",
