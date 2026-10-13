@@ -118,7 +118,12 @@ def evaluate_placement(
 
     starting = occupied_ids(raw_starters)
     mapping = map_slots(configuration, raw_starters, players)
-    defect = not membership_complete or mapping.status in ("defective", "invalid")
+    starters_malformed = (
+        "starters" in row and raw_starters is not None and not is_id_string_list(raw_starters)
+    )
+    defect = (
+        not membership_complete or mapping.status in ("defective", "invalid") or starters_malformed
+    )
     unavailable = not mapping.interpreted
     if mapping.duplicate_ids:
         duplicates["starters"] = mapping.duplicate_ids
