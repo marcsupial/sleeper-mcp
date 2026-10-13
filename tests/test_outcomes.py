@@ -27,6 +27,7 @@ from .world import (
     make_runtime,
     matchup_row,
     other_row,
+    profile,
     reasons,
     roster_row,
     run,
@@ -141,12 +142,21 @@ async def test_missing_configuration_is_partial_slot_mapping(
     assert [a.raw for a in weekly.assignments] == STARTERS
 
 
-async def test_malformed_configuration_is_partial_and_invalid(tmp_path: Path) -> None:
+def configuration_guard(result: Any) -> Any:
+    guards = result.resolution_evidence.league.scope.guards
+    return next(g for g in guards if g.name == "starting_configuration_matches")
+
+
+@pytest.mark.parametrize("positions", [[], ["BN", "BN"], {}, "QB", ["QB", None], ["QB", 1, "BN"]])
+async def test_malformed_configuration_is_an_error(tmp_path: Path, positions: Any) -> None:
     world = World()
-    world.league["roster_positions"] = ["QB", 1, "BN"]
+    world.league["roster_positions"] = positions
     result, _ = await run(world, tmp_path)
-    assert result.outcome == "partial"
-    assert reasons(result)[:2] == ["slot_mapping_unavailable", "invalid_source_data"]
+    assert result.outcome == "error"
+    assert reasons(result) == ["invalid_source_data"]
+    assert result.context is None
+    assert configuration_guard(result).result == "invalid"
+    assert result.issues[0].retryable is None
 
 
 async def test_previous_league_id_is_never_followed(tmp_path: Path) -> None:
@@ -222,6 +232,24 @@ async def test_archived_target_without_week_never_reads_state(tmp_path: Path) ->
     assert explicit.context.player_details.data["HOU"].roles == ["weekly_starter", "weekly_member"]
 
 
+async def test_explicit_current_week_keeps_applicability_unknown(tmp_path: Path) -> None:
+    # IMPL-B01: applicability follows how the week was chosen, not which week it is.
+    world = World()
+    world.players["P1"] = profile("P1", "QB", "SYNTHETIC_TOKEN")
+    automatic, _ = await run(world, tmp_path)
+    assert automatic.outcome == "partial"
+    assert automatic.context is not None
+    assert automatic.context.player_details.data["P1"].applicability == "current_observation"
+
+    explicit, routes = await run(world, tmp_path / "b", {"week": 6})
+    assert explicit.outcome == "complete"
+    assert "state" not in calls(routes)
+    assert explicit.context is not None
+    details = explicit.context.player_details
+    assert details.data["P1"].applicability == "unknown"
+    assert "even when it equals the current week" in details.scope.applicability_basis
+
+
 # Roster boundary (A10) ------------------------------------------------------------------------
 
 
@@ -241,6 +269,22 @@ async def test_unusable_players_keeps_weekly_facts(tmp_path: Path, players: Any)
     assert result.context.roster.data.members is None
     assert result.context.weekly_lineup.coverage.assignments == "complete"
     assert result.context.view_comparison.membership_states["P2"] == "unknown"
+
+
+async def test_category_id_outside_players_makes_membership_partial(tmp_path: Path) -> None:
+    # IMPL-B01: a current starter missing from players means players may be incomplete, so
+    # no weekly starter outside players can be called absent.
+    world = World()
+    world.rosters[0]["players"].remove("P1")
+    result, _ = await run(world, tmp_path)
+    assert result.outcome == "partial"
+    assert result.context is not None
+    roster = result.context.roster
+    assert roster.coverage.membership == "partial"
+    assert roster.coverage.placement == "partial"
+    assert {"invalid_source_data", "placement_conflict"} <= set(reasons(result))
+    assert result.context.view_comparison.membership_states["P1"] == "unknown"
+    assert "weekly_player_not_in_current_roster" not in reasons(result)
 
 
 async def test_explicit_positive_with_sibling_defect_stays_complete(tmp_path: Path) -> None:
