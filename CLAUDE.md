@@ -21,3 +21,8 @@ CI runs all of these on Python 3.12 and 3.14. Keep code compatible with 3.12.
 - **Keep unknowns visible.** Missing, null, empty and malformed values mean different things; don't coerce one into another, and don't silently pick a league, roster or week for the user.
 - **MCP SDK is 2.x.** Use `MCPServer` from `mcp.server.mcpserver`. `FastMCP` and `mcp.server.fastmcp` are the old 1.x names and fail to import.
 - **Tests never hit the network.** Mock HTTP with `respx`.
+- **Never commit a real scope registry.** `SLEEPER_MCP_SCOPE_REGISTRY` points at a private file;
+  tests use the synthetic `tests/fixtures/scope-registry.json`. `SLEEPER_MCP_CACHE_DIR` holds the
+  player-directory snapshot.
+- **Every result branch is validated by our code.** The SDK skips output validation for error
+  results, so `finalize()` validates the v1 model and its internal references on every branch.
