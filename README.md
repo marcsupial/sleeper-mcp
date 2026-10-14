@@ -152,6 +152,21 @@ uv run ruff format .    # format
 uv run pyright          # type-check
 ```
 
+### Claude Desktop bundle
+
+```bash
+uv run python scripts/build_mcpb.py --check-install
+```
+
+Builds `dist/sleeper-mcp-<version>.mcpb` (needs `npx`). The script packs a copy of the project
+with the `dev` dependency group removed, because Claude Desktop installs a bundle with a plain
+`uv sync`. It fails if anything else in `uv.lock` changes or if the archive contains files other
+than `manifest.json`, `pyproject.toml`, `uv.lock`, `LICENSE` and `src/`. `--check-install` also
+installs the bundle with `uv sync --locked` and checks that no dev package lands in the venv.
+Don't run `mcpb pack .` directly. CI builds the bundle on every push and attaches it to published
+GitHub releases; bump the version in both `pyproject.toml` and `manifest.json` and tag the
+release `v<version>`.
+
 ## Not affiliated with Sleeper
 
 This is an independent project and is not endorsed by or affiliated with Sleeper.

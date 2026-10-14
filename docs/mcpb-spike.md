@@ -2,8 +2,8 @@
 
 **Verdict: go.** The `uv` server type works in Claude Desktop today. Installing the bundle
 replaces the hand-edited `claude_desktop_config.json` (absolute uv path, `--directory`, env vars)
-with a double-click and an optional settings field. Two follow-ups make it release-ready:
-keep the `dev` dependency group out of the bundle, and test the newest CPython in CI.
+with a double-click and an optional settings field. The two release blockers it found are now
+fixed: the bundle is built without the `dev` dependency group, and CI tests the newest CPython.
 PyPI plus `uvx` is still worth adding for other MCP clients, but not as Desktop's install path.
 
 Tested on 2026-10-13 with Claude Desktop 2.37337.1 (macOS, Apple silicon), `@anthropic-ai/mcpb`
@@ -20,7 +20,7 @@ Tested on 2026-10-13 with Claude Desktop 2.37337.1 (macOS, Apple silicon), `@ant
 | Tool list of the installed copy | `['get_lineup_context']` (stdio probe against the installed directory). |
 | Optional registry left empty | Server received `SLEEPER_MCP_SCOPE_REGISTRY=""`, so it reports `not_configured`. |
 | Desktop's fallback uv 0.9.7 (simulated) | `uv sync` and launch work; it reads our revision-5 `uv.lock` without rewriting it. |
-| Test suite on Python 3.15 | 336 passed (CI runs only 3.12 and 3.14). |
+| Test suite on Python 3.15 | 336 passed. CI now runs 3.12, 3.14 and 3.15. |
 
 Not verified: choosing a registry file in the settings UI (same substitution code as the empty
 default, so expected to work), Windows, and Desktop's own uv download on a machine without uv.
@@ -78,38 +78,54 @@ This is Desktop's implementation as observed in its logs and process tree, not t
 - `tests/test_package.py`: fails if the manifest's version or tool list drifts from the package.
 - `.gitignore`: `*.mcpb`.
 
-Build:
+Build (added after the spike; see friction item 1):
 
 ```bash
-npx @anthropic-ai/mcpb@2.1.2 pack . dist/sleeper-mcp-0.1.0.mcpb
+uv run python scripts/build_mcpb.py --check-install
 ```
+
+Don't run `mcpb pack .` on the checkout: the result would install the `dev` group.
 
 ## Friction that remains
 
-1. **Desktop installs the `dev` dependency group.** Its plain `uv sync` includes `dev` by default
-   (pyright, ruff, pytest, respx, jsonschema). Cold-cache measurements on the test connection:
+1. **Fixed: Desktop installs the `dev` dependency group.** Its plain `uv sync` includes `dev` by
+   default (pyright, ruff, pytest, respx, …). Cold-cache measurements on the test connection:
 
    | `uv sync` | Time | Venv |
    | --- | --- | --- |
    | As Desktop runs it (with `dev`) | 252 s | 94 MB |
    | Without `dev` | 79 s | 30 MB |
 
-   Options:
-   - **Recommended: build the bundle from a staging directory.** A release script copies the
-     allowlisted files, drops the `dev` group with `uv remove --group dev …`, then packs.
-     Contributors' `uv sync` is unchanged. Checked on a copy of the bundle: this removes the 11
-     dev-only packages from `uv.lock` without changing any other version, `uv sync --locked`
-     passes, and the venv is 30 MB.
-   - `[tool.uv] default-groups = []` plus `uv lock` (a one-line lock diff). The bundle drops to
-     30 MB, but every contributor and CI step must use `uv sync --all-groups`. After a plain
-     `uv sync`, `uv run pytest` silently falls back to any global `pytest` on PATH instead of
-     failing. That footgun was observed during this spike.
-   - Accept it. Desktop's install dialog already warns that setup "may take a few minutes".
-2. **The interpreter is whatever uv picks.** Without `.python-version`, users get the newest
-   Python ≥ 3.12 on their machine (3.15.0 here), which CI does not test. The suite passes on 3.15.
-   Pinning `.python-version` in the bundle would control this. But Desktop has a feature flag
-   that adds `--no-python-downloads`, and with it on, the install would fail on machines without
-   that exact minor version. Prefer adding the newest CPython to the CI matrix.
+   `scripts/build_mcpb.py` now builds the bundle from a staging directory, so contributors'
+   `uv sync` is unchanged. It:
+   - copies `manifest.json`, `pyproject.toml`, `uv.lock`, `LICENSE` and `src/` (without bytecode)
+     into a temporary directory;
+   - runs `uv remove --no-sync --group dev` there for every package in the `dev` group, read from
+     `pyproject.toml`;
+   - fails unless exactly the dev-only packages left `uv.lock` (those no runtime dependency
+     reaches; 11 today, `jsonschema` stays because `mcp` needs it) and every other lock entry is
+     unchanged;
+   - packs it with `npx @anthropic-ai/mcpb@2.1.2 pack` into `dist/sleeper-mcp-<version>.mcpb`;
+   - fails if the archive holds anything outside those five entries, any `__pycache__` or `.pyc`,
+     or a non-empty `dev` group;
+   - with `--check-install`, unpacks the bundle, runs `uv sync --locked`, and fails if any dev
+     package was installed. The venv is about 30 MB (27 MB by file size).
+
+   The `MCPB bundle` CI job runs it with `--check-install` on every push and pull request and
+   uploads the `.mcpb` as a workflow artifact. On a published GitHub release, once the test
+   matrix passes, the `attach` job adds it to the release. It refuses a tag that doesn't match
+   the package version (`v0.1.0` for `0.1.0`).
+
+   Rejected: `[tool.uv] default-groups = []` plus `uv lock`. The bundle drops to 30 MB, but every
+   contributor and CI step must use `uv sync --all-groups`. After a plain `uv sync`,
+   `uv run pytest` silently falls back to any global `pytest` on PATH instead of failing. That
+   footgun was observed during this spike.
+2. **Fixed: the interpreter is whatever uv picks.** Without `.python-version`, users get the
+   newest Python ≥ 3.12 on their machine (3.15.0 here). Pinning `.python-version` in the bundle
+   would control this. But Desktop has a feature flag that adds `--no-python-downloads`, and with
+   it on, the install would fail on machines without that exact minor version. So the bundle
+   stays unpinned, and the CI matrix now tests 3.15 next to 3.12 and 3.14. Add each new CPython
+   to the matrix when it is released.
 3. **Unsigned.** Desktop logs "Installing unsigned extension". `mcpb sign` exists, but a
    self-signed certificate doesn't make the bundle trusted. That needs a trusted certificate or
    a listing in the extension directory.
@@ -180,9 +196,8 @@ The "Other MCP clients" part depends on publishing to PyPI first.
 
 ## Suggested next steps
 
-1. Add a release workflow that builds the bundle from a staging directory without `dev`
-   (friction 1), attaches the `.mcpb` to the GitHub release and publishes the wheel to PyPI.
-2. Add the newest CPython to the CI matrix (friction 2).
-3. Once structural scope and the username input land, add the `username` field above, update
+1. Done: CI builds the bundle without `dev` and attaches it to published releases (friction 1),
+   and tests the newest CPython (friction 2). PyPI publishing is still open.
+2. Once structural scope and the username input land, add the `username` field above, update
    the README, and decide whether the registry field is still needed.
-4. Add an icon and pass a version to `MCPServer`.
+3. Add an icon and pass a version to `MCPServer`.

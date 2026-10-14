@@ -32,5 +32,5 @@ htmlcov/
 CLAUDE.local.md
 .claude/settings.local.json
 
-# MCPB bundles (built with `npx @anthropic-ai/mcpb pack`)
+# MCPB bundles (built with `uv run python scripts/build_mcpb.py`)
 *.mcpb
