@@ -53,30 +53,21 @@ def test_combination_table() -> None:
 # Scope without network ------------------------------------------------------------------------
 
 
-async def test_absent_registry_is_unsupported_without_requests(tmp_path: Path) -> None:
-    runtime = make_runtime(tmp_path, registry=NoRegistry("not_configured"))
+async def test_refused_registry_is_unsupported_without_requests(tmp_path: Path) -> None:
+    runtime = make_runtime(tmp_path, registry=NoRegistry("refused"))
     result, routes = await run(World(), tmp_path, runtime=runtime)
     assert result.outcome == "error"
     assert reasons(result) == ["unsupported_scope"]
-    assert result.issues[0].cause == "registry_absent"
-    assert result.resolution_evidence.league.scope.registry == "absent"
+    assert result.issues[0].cause == "registry_refused"
+    assert result.resolution_evidence.league.scope.registry == "refused"
     assert calls(routes) == {}
 
 
-@pytest.mark.parametrize(
-    ("league_id", "target"),
-    [
-        ("test-league-unknown", "not_registered"),
-        ("test-league-lookalike-2024", "unsupported_comparison"),
-    ],
-)
-async def test_unregistered_league_is_unsupported_without_requests(
-    tmp_path: Path, league_id: str, target: str
-) -> None:
-    result, routes = await run(World(), tmp_path, {"league_id": league_id})
+async def test_excluded_league_is_unsupported_without_requests(tmp_path: Path) -> None:
+    result, routes = await run(World(), tmp_path, {"league_id": "test-league-lookalike-2024"})
     assert reasons(result) == ["unsupported_scope"]
-    assert result.issues[0].cause == "league_not_registered"
-    assert result.resolution_evidence.league.scope.target == target
+    assert result.issues[0].cause == "league_excluded"
+    assert result.resolution_evidence.league.scope.target == "unsupported_comparison"
     assert calls(routes) == {}
 
 

@@ -179,9 +179,11 @@ class UserEvidence(Strict):
 
 
 class LeagueScope(Strict):
-    registry: Literal["configured", "absent"]
+    registry: Literal["configured", "absent", "refused"]
     extension_id: str | None
-    target: Literal["registered", "not_registered", "unsupported_comparison"] | None
+    target: (
+        Literal["registered", "structural_match", "not_registered", "unsupported_comparison"] | None
+    )
     automatic_week: Literal["agreeing_same_season_four_signals", "explicit_week_only"] | None
     week_domain: list[int] | None
     starting_configuration: list[str] | None

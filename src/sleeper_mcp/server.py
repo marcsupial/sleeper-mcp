@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from functools import cache
+from importlib.metadata import version
 
 from mcp.server.mcpserver import MCPServer
 
@@ -34,7 +35,7 @@ def build_runtime(config: Config) -> Runtime:
 
 
 def create_server(runtime: Runtime | None = None) -> MCPServer:
-    server = MCPServer("sleeper-mcp", instructions=INSTRUCTIONS)
+    server = MCPServer("sleeper-mcp", version=version("sleeper-mcp"), instructions=INSTRUCTIONS)
 
     @cache
     def lazy_runtime() -> Runtime:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from sleeper_mcp.contract import SLOT_RULES
 from sleeper_mcp.json_values import (
     JsonObject,
     as_object,
@@ -25,7 +26,13 @@ from sleeper_mcp.lineup_context.schema import (
     UserData,
     UserEvidence,
 )
-from sleeper_mcp.scope import Target
+from sleeper_mcp.scope import (
+    STRUCTURAL_BEST_BALL,
+    STRUCTURAL_SEASON_TYPE,
+    STRUCTURAL_SPORT,
+    Target,
+    structural_target,
+)
 from sleeper_mcp.sleeper.observation import SourceObservation
 
 LEAGUE_FIELDS = [
@@ -135,17 +142,24 @@ class LeagueResult:
     issues: list[IssueSpec]
     league: JsonObject | None
     configuration_status: Literal["mapped", "unavailable", "not_evaluated"]
+    # The registered target, or the structural one derived from the league; set when resolved.
+    target: Target | None = None
 
     @property
     def resolved(self) -> bool:
         return self.evidence.status == "resolved"
 
 
-def base_scope(target: Target | None, extension_id: str | None, registry: bool) -> LeagueScope:
+RegistryState = Literal["configured", "absent", "refused"]
+
+
+def base_scope(
+    target: Target | None, extension_id: str | None, registry: RegistryState
+) -> LeagueScope:
     return LeagueScope(
-        registry="configured" if registry else "absent",
+        registry=registry,
         extension_id=extension_id,
-        target="registered" if target else None,
+        target=target.basis if target else None,
         automatic_week=target.automatic_week if target else None,
         week_domain=list(target.week_domain) if target else None,
         starting_configuration=list(target.starting_configuration) if target else None,
@@ -162,9 +176,10 @@ def defaults_for(request: NormalizedRequest) -> list[DefaultApplied]:
 def evaluate_league(
     obs: SourceObservation,
     request: NormalizedRequest,
-    target: Target,
+    target: Target | None,
     scope: LeagueScope,
 ) -> LeagueResult:
+    """Check the league against its registered target, or structurally when `target` is None."""
     defaults = defaults_for(request)
 
     def result(
@@ -173,6 +188,7 @@ def evaluate_league(
         league: JsonObject | None = None,
         observed_body: bool = True,
         configuration: Literal["mapped", "unavailable", "not_evaluated"] = ("not_evaluated"),
+        resolved_target: Target | None = None,
     ) -> LeagueResult:
         body = obs.body if obs.ok else None
         data = None
@@ -195,7 +211,11 @@ def evaluate_league(
             source_refs=[obs.id],
         )
         return LeagueResult(
-            evidence, issues, league if status == "resolved" else None, configuration
+            evidence,
+            issues,
+            league if status == "resolved" else None,
+            configuration,
+            resolved_target if status == "resolved" else None,
         )
 
     def invalid(explanation: str, field: str) -> LeagueResult:
@@ -312,11 +332,12 @@ def evaluate_league(
         )
     settings = as_object(league.get("settings"))
     best_ball = settings.get("best_ball") if settings is not None else None
+    expected_best_ball = target.best_ball if target else STRUCTURAL_BEST_BALL
     if settings is None or not is_json_int(best_ball):
         guards.append(
             Guard(
                 name="best_ball_integer_zero",
-                expected=target.best_ball,
+                expected=expected_best_ball,
                 observed=raw_field(settings, "best_ball", "settings.best_ball")
                 if settings is not None
                 else raw_field(league, "settings"),
@@ -328,22 +349,33 @@ def evaluate_league(
             "cannot be verified. An explicit week does not bypass this guard.",
             "settings.best_ball",
         )
-    for key, expected in (
-        ("sport", target.sport),
-        ("season", target.season),
-        ("season_type", target.season_type),
-    ):
-        ok = league[key] == expected
-        guard(f"{key}_matches_target", expected, key, ok)
-        if not ok:
-            return unsupported(
-                f"The league's {key} is outside the supported scope for this league.", key
-            )
-    bb_ok = best_ball == target.best_ball
+    if target is not None:
+        for key, expected in (
+            ("sport", target.sport),
+            ("season", target.season),
+            ("season_type", target.season_type),
+        ):
+            ok = league[key] == expected
+            guard(f"{key}_matches_target", expected, key, ok)
+            if not ok:
+                return unsupported(
+                    f"The league's {key} is outside the supported scope for this league.", key
+                )
+    else:
+        for key, expected in (("sport", STRUCTURAL_SPORT), ("season_type", STRUCTURAL_SEASON_TYPE)):
+            ok = league[key] == expected
+            guard(f"{key}_supported", expected, key, ok)
+            if not ok:
+                return unsupported(
+                    f"The league's {key} is {league[key]}; only NFL regular-season leagues are "
+                    "supported.",
+                    key,
+                )
+    bb_ok = best_ball == expected_best_ball
     guards.append(
         Guard(
             name="best_ball_integer_zero",
-            expected=target.best_ball,
+            expected=expected_best_ball,
             observed=raw_field(settings, "best_ball", "settings.best_ball"),
             result="pass" if bb_ok else "fail",
         )
@@ -353,14 +385,27 @@ def evaluate_league(
             "Best-ball leagues are outside the supported scope.", "settings.best_ball"
         )
 
-    # Starting configuration (A05).
+    # Starting configuration (A05): an exact match for a registered target; for a structural
+    # one, every starting slot needs a slot rule.
     positions = league.get("roster_positions")
     issues: list[IssueSpec] = []
     configuration: Literal["mapped", "unavailable", "not_evaluated"] = "mapped"
-    expected_configuration = list(target.starting_configuration)
+    if target is not None:
+        guard_name = "starting_configuration_matches"
+        guard_expected: list[str] = list(target.starting_configuration)
+    else:
+        guard_name = "starting_slots_supported"
+        guard_expected = list(SLOT_RULES)
+    if positions is None and target is None:
+        guard(guard_name, guard_expected, "roster_positions", None)
+        return invalid(
+            f"roster_positions is {field_state(league, 'roster_positions')}, so structural "
+            "support for this league cannot be confirmed.",
+            "roster_positions",
+        )
     if positions is None:
         configuration = "unavailable"
-        guard("starting_configuration_matches", expected_configuration, "roster_positions", None)
+        guard(guard_name, guard_expected, "roster_positions", None)
         issues.append(
             IssueSpec(
                 reason="slot_mapping_unavailable",
@@ -374,29 +419,48 @@ def evaluate_league(
                 retryable=None,
             )
         )
-    else:
-        starting = (
-            [p for p in positions if p != "BN"]  # pyright: ignore[reportUnknownVariableType]
-            if is_id_string_list(positions)
-            else None
+        return result(
+            "resolved", issues, league, configuration=configuration, resolved_target=target
         )
-        # IMPL-B01: a present configuration without starting slots leaves the scope guard
-        # unevaluated, so the call stops. BN-only counts as malformed, as in A05 and A09.
-        if starting is None or not starting:
-            guard(
-                "starting_configuration_matches", expected_configuration, "roster_positions", None
-            )
-            return invalid(
-                "roster_positions is not an array of slot labels with at least one starting "
-                "slot, so the supported starting configuration cannot be confirmed.",
-                "roster_positions",
-            )
-        ok = starting == expected_configuration
-        guard("starting_configuration_matches", expected_configuration, "roster_positions", ok)
+    starting = (
+        [p for p in positions if p != "BN"]  # pyright: ignore[reportUnknownVariableType]
+        if is_id_string_list(positions)
+        else None
+    )
+    # IMPL-B01: a present configuration without starting slots leaves the scope guard
+    # unevaluated, so the call stops. BN-only counts as malformed, as in A05 and A09.
+    if starting is None or not starting:
+        guard(guard_name, guard_expected, "roster_positions", None)
+        return invalid(
+            "roster_positions is not an array of slot labels with at least one starting "
+            "slot, so the supported starting configuration cannot be confirmed.",
+            "roster_positions",
+        )
+    starting_labels = [str(label) for label in starting]  # pyright: ignore[reportUnknownVariableType]
+    if target is not None:
+        ok = starting_labels == guard_expected
+        guard(guard_name, guard_expected, "roster_positions", ok)
         if not ok:
             return unsupported(
                 "The league's starting configuration differs from the supported configuration "
                 "for this league.",
                 "roster_positions",
             )
-    return result("resolved", issues, league, configuration=configuration)
+        return result(
+            "resolved", issues, league, configuration=configuration, resolved_target=target
+        )
+    unknown = list(dict.fromkeys(label for label in starting_labels if label not in SLOT_RULES))
+    guard(guard_name, guard_expected, "roster_positions", not unknown)
+    if unknown:
+        return unsupported(
+            f"The league uses starting slots this server has no rules for: {', '.join(unknown)}.",
+            "roster_positions",
+        )
+    derived = structural_target(
+        request.league_id, str(league["season"]), tuple(starting_labels), league.get("status")
+    )
+    scope.target = derived.basis
+    scope.automatic_week = derived.automatic_week
+    scope.week_domain = list(derived.week_domain)
+    scope.starting_configuration = list(derived.starting_configuration)
+    return result("resolved", issues, league, configuration=configuration, resolved_target=derived)

@@ -30,7 +30,8 @@ Inputs: user_id is the stable numeric Sleeper user ID (not a username). league_i
 league ID. Omit week to use the provider-observed current week when all week signals agree; \
 otherwise the result is partial with reason week_resolution_required: call again with an explicit \
 integer week. If the user has several rosters (outcome selection_required), call again with one \
-of the candidate roster_id values. Only registered leagues are supported.
+of the candidate roster_id values. Supported leagues are NFL, regular season and not best ball, \
+with starting slots from QB, RB, WR, TE, FLEX, SUPER_FLEX, K and DEF; others are unsupported_scope.
 
 The resolved league, roster, season and week are pinned for the call and reported in `resolved`. \
 Unknown, missing, malformed and stale data are reported explicitly in `issues` and section \
