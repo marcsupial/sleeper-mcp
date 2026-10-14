@@ -32,17 +32,106 @@ Outcomes:
 Missing, null, empty, malformed and stale data stay visible: they are never replaced with defaults.
 A complete result does not prove freshness, player health, lock status or historical eligibility.
 
+### Supported leagues
+
+Any Sleeper league that meets all of these rules, checked against the live league on every call:
+
+- NFL, regular season, not best ball.
+- Every starting slot is one of `QB`, `RB`, `WR`, `TE`, `FLEX`, `SUPER_FLEX`, `K` or `DEF`.
+  Leagues with IDP or other flex slots (for example `DL`, `REC_FLEX`) return `unsupported_scope`
+  and name the slots they use.
+- Completed past seasons need an explicit `week`. Their slots are mapped from the league's latest
+  configuration, and the result labels that basis because it may differ from the original week's.
+
+Each result reports how the league was admitted in `resolution_evidence.league.scope`, together
+with every guard it checked.
+
+## Setup
+
+You need [uv](https://docs.astral.sh/uv/), a Sleeper league, and an MCP client such as Claude
+Desktop or Claude Code. No Sleeper login or API key is needed; the server only reads public data.
+
+### 1. Get the code
+
+```bash
+git clone https://github.com/marcsupial/sleeper-mcp.git
+cd sleeper-mcp
+uv sync
+```
+
+Clients start the server with `uv run --directory /absolute/path/to/sleeper-mcp sleeper-mcp`, which
+uses this checkout as-is. To try it without cloning, use
+`uvx --from git+https://github.com/marcsupial/sleeper-mcp sleeper-mcp` as the command instead.
+
+### 2. Connect a client
+
+Use absolute paths. Clients start the server with a minimal environment, so a bare `uv` may not be
+found. Find uv's path with `which uv`.
+
+**Claude Desktop.** Open Settings → Developer → Edit Config, add the server to
+`claude_desktop_config.json`, then quit and reopen Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "sleeper": {
+      "command": "/absolute/path/to/uv",
+      "args": ["run", "--directory", "/absolute/path/to/sleeper-mcp", "sleeper-mcp"]
+    }
+  }
+}
+```
+
+**Claude Code.**
+
+```bash
+claude mcp add sleeper -- uv run --directory /absolute/path/to/sleeper-mcp sleeper-mcp
+```
+
+**MCP Inspector**, to call the tool by hand without an assistant:
+
+```bash
+npx @modelcontextprotocol/inspector -- uv run --directory /absolute/path/to/sleeper-mcp sleeper-mcp
+```
+
+### 3. Find your IDs
+
+The tool currently takes IDs, not names.
+
+- **User ID:** open `https://api.sleeper.app/v1/user/<your-username>` and copy `user_id`.
+- **League ID:** the number in the league's web address, `https://sleeper.com/leagues/<league_id>`,
+  or `league_id` in `https://api.sleeper.app/v1/user/<user_id>/leagues/nfl/<season>`.
+
+Then ask your assistant something like *"Show my lineup for league `<league_id>`. My Sleeper user
+ID is `<user_id>`."*
+
+### Troubleshooting
+
+- **Check the configuration.** `uv run sleeper-mcp --check` reports the effective settings without
+  contacting Sleeper. It exits with status 1 when the server could not serve any league.
+- **Logs.** The server logs to stderr. Claude Desktop saves it to
+  `~/Library/Logs/Claude/mcp-server-sleeper.log` on macOS and `%APPDATA%\Claude\logs` on Windows.
+- **`unsupported_scope`.** The issue's explanation names the rule the league failed. If every call
+  fails with cause `registry_refused`, a configured scope registry was refused; the log says why.
+- **Slow first call.** The first call downloads Sleeper's player directory (about 15 MB). Later calls
+  reuse it for 24 hours.
+
 ## Configuration
+
+Everything is optional.
 
 | Variable | Meaning |
 | --- | --- |
-| `SLEEPER_MCP_SCOPE_REGISTRY` | Path to a JSON scope registry listing the supported leagues. |
+| `SLEEPER_MCP_SCOPE_REGISTRY` | Path to a JSON scope registry that pins or excludes specific leagues. |
 | `SLEEPER_MCP_CACHE_DIR` | Where the daily player-directory snapshot is kept. Defaults to `~/Library/Caches/sleeper-mcp` on macOS, otherwise `$XDG_CACHE_HOME/sleeper-mcp` or `~/.cache/sleeper-mcp`. |
 
-**Supported scope.** The tool only serves leagues listed in the scope registry, and it checks that
-each league's sport, season, format and starting slots match its registry entry. Without a registry
-every request returns `unsupported_scope`. The registry is private configuration; this repository
-ships only a synthetic one for tests (`tests/fixtures/scope-registry.json`).
+**Pinning leagues.** A scope registry lists exact league instances
+([example](examples/scope-registry.example.json)). A pinned league must keep the season, format and
+starting slots recorded in its entry, so a change in Sleeper fails the call instead of passing
+silently. Leagues in `unsupported_comparisons` are refused. Any other league is still checked
+structurally. Keep `slot_rules`, `existing_policy_bindings` and `fetch_controls` exactly as in the
+example: the server refuses a registry whose values differ from the behavior it implements, and
+then serves no league at all.
 
 **Fetching.** Each call reads the user, league, rosters, the requested week (and NFL state for an
 automatic week) directly from Sleeper's public API, within a 15-second call deadline, at most seven
@@ -54,8 +143,6 @@ and reused from the cache directory.
 and `requested` shows the value as received.
 
 ## Development
-
-Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync                 # install dependencies

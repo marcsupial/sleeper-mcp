@@ -1,0 +1,88 @@
+{
+  "targets": {
+    "REPLACE_WITH_YOUR_LEAGUE_ID": {
+      "sport": "nfl",
+      "season_type": "regular",
+      "best_ball": 0,
+      "week_domain": [
+        1,
+        18
+      ],
+      "season": "2026",
+      "starting_configuration": [
+        "QB",
+        "RB",
+        "RB",
+        "WR",
+        "WR",
+        "TE",
+        "FLEX",
+        "FLEX"
+      ],
+      "automatic_week": "agreeing_same_season_four_signals"
+    }
+  },
+  "slot_rules": {
+    "QB": [
+      "QB"
+    ],
+    "RB": [
+      "RB"
+    ],
+    "WR": [
+      "WR"
+    ],
+    "TE": [
+      "TE"
+    ],
+    "FLEX": [
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "SUPER_FLEX": [
+      "QB",
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "K": [
+      "K"
+    ],
+    "DEF": [
+      "DEF"
+    ]
+  },
+  "existing_policy_bindings": {
+    "A02": "rest_owner_co_owner_null_v1",
+    "A03": "nfl_agreeing_week_signals_v1",
+    "A04": "rest_roster_placements_v1",
+    "A05": [
+      "rest_configured_starting_slots_v1",
+      "rest_string_zero_vacancy_v1"
+    ],
+    "A06": "rest_weekly_observed_assignments_v1",
+    "A07": "rest_separate_current_weekly_views_v1",
+    "A08": "manual_observed_context_fetch_v1",
+    "A09": "rest_observed_fantasy_eligibility_v1"
+  },
+  "fetch_controls": {
+    "call_deadline_seconds": 15,
+    "attempt_deadline_seconds": 5,
+    "httpx_phase_seconds": {
+      "connect": 2,
+      "read": 3,
+      "write": 2,
+      "pool": 1
+    },
+    "route_budget": 6,
+    "attempt_budget": 7,
+    "max_in_flight": 2,
+    "process_attempts_per_minute": 60,
+    "eligible_core_retry_budget": 1,
+    "directory_snapshot_age_seconds_exclusive": 86400,
+    "directory_refresh_attempts_per_24h": 1,
+    "core_older_local_fallback": false,
+    "http_429_missing_retry_after_cooldown_seconds": 60
+  }
+}
