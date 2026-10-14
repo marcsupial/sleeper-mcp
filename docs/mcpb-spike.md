@@ -56,6 +56,7 @@ This is Desktop's implementation as observed in its logs and process tree, not t
 - **An optional `user_config` field with no `default` is never substituted.** The env var
   receives the literal text `${user_config.scope_registry}`. The server would read that as a
   path, fail to open it, and report the registry as `refused` instead of `not_configured`.
+  A refused registry supports no league at all, so the server would be useless.
   Every optional field therefore declares `"default": ""`.
 - **`mcpb pack` ignores `.gitignore`.** It walks the directory and would bundle `.venv/`,
   `tests/`, caches and any local `*.local.json`. `.mcpbignore` is therefore an allowlist
@@ -129,13 +130,16 @@ Don't run `mcpb pack .` on the checkout: the result would install the `dev` grou
 3. **Unsigned.** Desktop logs "Installing unsigned extension". `mcpb sign` exists, but a
    self-signed certificate doesn't make the bundle trusted. That needs a trusted certificate or
    a listing in the extension directory.
-4. **Scope registry.** Without a registry, every call returns `unsupported_scope`, and building
-   a registry is not a one-click task. The structural league scope work being done separately
-   removes this. Until it lands, the bundle is useful only to people who already have a registry.
+4. **Fixed: scope registry.** At spike time, every call without a registry returned
+   `unsupported_scope`. Structural scope (marcsupial/sleeper-mcp#6) made the registry optional:
+   without one, any league with the supported structure is served. The bundle's
+   `scope_registry` field stays optional (`"required": false`, `"default": ""`) and now only pins
+   or excludes leagues.
 5. **Cosmetic issues.** There is no icon, so Desktop shows a default; add a 512×512
-   `icon.png`. `serverInfo.version` is empty because `MCPServer` is created without a version.
+   `icon.png`. (`serverInfo.version` was empty at spike time; the server now reports its package
+   version.)
 6. **Stale manual config.** Anyone who hand-configured the server will run two copies that both
-   expose `get_lineup_context`. The README should tell them to delete the old entry.
+   expose `get_lineup_context`. The README's bundle instructions now tell them to remove it.
 
 ## Where `SLEEPER_MCP_USERNAME` will go
 
@@ -175,7 +179,8 @@ complements the bundle without replacing it. Both can come from the same tagged 
    [latest release](https://github.com/marcsupial/sleeper-mcp/releases/latest).
 2. Double-click it, or drag it onto **Settings → Extensions**, and click **Install**. The first
    install downloads Python dependencies and can take a few minutes.
-3. Optional: in the extension's settings, choose your **Scope registry** file.
+3. Optional: to pin or exclude specific leagues, choose a **Scope registry** file in the
+   extension's settings.
 
 You don't need to install Python or uv, or edit any configuration file. If uv isn't installed,
 Claude Desktop downloads its own copy. If you added sleeper-mcp to `claude_desktop_config.json`
@@ -189,7 +194,7 @@ Requires [uv](https://docs.astral.sh/uv/). Add a stdio server that runs:
 { "command": "uvx", "args": ["sleeper-mcp"] }
 ```
 
-Set `SLEEPER_MCP_SCOPE_REGISTRY` in the server's environment to use a scope registry.
+Optionally set `SLEEPER_MCP_SCOPE_REGISTRY` in the server's environment to pin leagues.
 ````
 
 The "Other MCP clients" part depends on publishing to PyPI first.
@@ -198,6 +203,6 @@ The "Other MCP clients" part depends on publishing to PyPI first.
 
 1. Done: CI builds the bundle without `dev` and attaches it to published releases (friction 1),
    and tests the newest CPython (friction 2). PyPI publishing is still open.
-2. Once structural scope and the username input land, add the `username` field above, update
-   the README, and decide whether the registry field is still needed.
-3. Add an icon and pass a version to `MCPServer`.
+2. Done: structural scope landed and the registry field is optional pinning (friction 4).
+   Once the username input lands, add the `username` field above and update the README.
+3. Add an icon.

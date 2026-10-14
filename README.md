@@ -50,6 +50,7 @@ with every guard it checked.
 
 You need [uv](https://docs.astral.sh/uv/), a Sleeper league, and an MCP client such as Claude
 Desktop or Claude Code. No Sleeper login or API key is needed; the server only reads public data.
+To use the Claude Desktop bundle (below), you need neither uv nor step 1.
 
 ### 1. Get the code
 
@@ -65,10 +66,18 @@ uses this checkout as-is. To try it without cloning, use
 
 ### 2. Connect a client
 
-Use absolute paths. Clients start the server with a minimal environment, so a bare `uv` may not be
-found. Find uv's path with `which uv`.
+**Claude Desktop, one-click bundle.** Download `sleeper-mcp-<version>.mcpb` from the
+[latest release](https://github.com/marcsupial/sleeper-mcp/releases/latest), or build it yourself
+(see [Development](#claude-desktop-bundle)). Double-click it, or drag it onto Settings →
+Extensions, and click **Install**. The first install downloads Python dependencies and can take a
+few minutes; if uv isn't installed, Claude Desktop downloads its own copy. The extension's optional
+**Scope registry** setting pins or excludes leagues. If you also added the server to
+`claude_desktop_config.json` by hand, remove that entry, or both copies will run.
 
-**Claude Desktop.** Open Settings → Developer → Edit Config, add the server to
+For the manual setups below, use absolute paths. Clients start the server with a minimal
+environment, so a bare `uv` may not be found. Find uv's path with `which uv`.
+
+**Claude Desktop, manual config.** Open Settings → Developer → Edit Config, add the server to
 `claude_desktop_config.json`, then quit and reopen Claude Desktop:
 
 ```json

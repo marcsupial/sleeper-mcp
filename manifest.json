@@ -40,7 +40,7 @@
     "scope_registry": {
       "type": "file",
       "title": "Scope registry",
-      "description": "Optional JSON file listing the leagues this server supports. Without it every request returns unsupported_scope.",
+      "description": "Optional JSON file that pins or excludes specific leagues. Leave it empty to serve any league that meets the supported structure.",
       "required": false,
       "default": ""
     }
