@@ -10,9 +10,11 @@ uv run pytest              # tests
 uv run ruff check .        # lint
 uv run ruff format .       # format
 uv run pyright             # type-check (strict)
+uv run python scripts/build_mcpb.py --check-install   # build the Claude Desktop bundle
 ```
 
-CI runs all of these on Python 3.12 and 3.14. Keep code compatible with 3.12.
+CI runs the checks on Python 3.12, 3.14 and 3.15 and builds the bundle. Keep code compatible with
+3.12. Build bundles with the script, never `mcpb pack .` directly.
 
 ## Rules
 
