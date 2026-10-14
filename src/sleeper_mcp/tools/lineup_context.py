@@ -21,6 +21,9 @@ from sleeper_mcp.lineup_context.service import Runtime, get_lineup_context
 
 TOOL_NAME = "get_lineup_context"
 
+# Asks Claude clients to show results up to this size inline: about 2x the largest measured result.
+MAX_RESULT_SIZE_CHARS = 131_072
+
 DESCRIPTION = """\
 Read-only. Returns one Sleeper NFL league's rules, the user's current roster with placements, and \
 the starting lineup for one pinned week, as a get_lineup_context.v1 object. Nothing is changed in \
@@ -122,4 +125,5 @@ def register(server: MCPServer, runtime: Callable[[], Runtime]) -> None:
             title="Get lineup context",
             description=DESCRIPTION,
             annotations=ANNOTATIONS,
+            meta={"anthropic/maxResultSizeChars": MAX_RESULT_SIZE_CHARS},
         )(get_lineup_context_tool)

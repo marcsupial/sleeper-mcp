@@ -348,6 +348,27 @@ async def test_slow_body_is_stopped_by_the_attempt_deadline() -> None:
 
 
 @respx.mock
+async def test_body_that_breaks_partway_is_a_transport_error() -> None:
+    async def partial() -> AsyncIterator[bytes]:
+        yield b'{"user_id": "test-'
+        raise httpx.RemoteProtocolError("peer closed connection without sending complete body")
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=partial())
+
+    route = respx.get(USER_URL).mock(side_effect=respond)
+    fetcher, budget = make()
+    observation = await fetcher.fetch(routes.user("test-owner-1"), budget, "src-user")
+    assert observation.failure is not None
+    assert observation.failure.cause == "transport_error"
+    # Same rule as a connect error: one retry on a core route.
+    assert [a.outcome for a in observation.attempts] == ["transport_error", "transport_error"]
+    assert all(a.http_status is None for a in observation.attempts)
+    assert route.call_count == 2
+    assert observation.body is None
+
+
+@respx.mock
 async def test_call_deadline_clips_the_attempt() -> None:
     async def hang(request: httpx.Request) -> httpx.Response:
         await anyio.sleep(5)

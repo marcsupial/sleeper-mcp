@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "sleeper-mcp",
   "display_name": "Sleeper (read-only)",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only lineup context for Sleeper fantasy football leagues",
   "long_description": "Lets Claude read a Sleeper league's rules, your roster and a week's starting lineup so it can help you review them. Read-only: it only calls Sleeper's public read API and never changes a lineup, roster, league or account. Not affiliated with Sleeper.",
   "author": {

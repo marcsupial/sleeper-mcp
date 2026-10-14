@@ -152,3 +152,4 @@ async def test_published_tool_metadata(tmp_path: Path) -> None:
     assert tool.output_schema is not None
     assert tool.output_schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
     assert "username" in (tool.description or "")
+    assert tool.meta == {"anthropic/maxResultSizeChars": 131072}
