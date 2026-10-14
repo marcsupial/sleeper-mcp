@@ -1,0 +1,12 @@
+# `mcpb pack` walks the directory and ignores .gitignore, so this is an allowlist: drop every
+# top-level entry, then keep only what the uv runtime needs to `uv sync` and start the server.
+# Tests, fixtures, caches, .venv and local configuration never enter the bundle.
+/*
+!/manifest.json
+!/pyproject.toml
+!/uv.lock
+!/LICENSE
+!/src
+
+__pycache__
+*.py[cod]
