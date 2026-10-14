@@ -3,6 +3,8 @@
 A read-only [Model Context Protocol](https://modelcontextprotocol.io) server for [Sleeper](https://sleeper.com) fantasy football. It lets an AI assistant look up your leagues, rosters and weekly lineups so it can help you review them.
 
 > **Status:** experimental. One tool is available. Its output size is not yet bounded.
+> The tool asks Claude clients to show results up to 131,072 characters inline; other clients may
+> truncate long results.
 
 ## Tools
 

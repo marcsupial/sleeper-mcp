@@ -167,3 +167,75 @@ def test_row_evidence_keeps_raw_field_states() -> None:
     assert second.co_owners.state == "omitted"
     assert second.owner_id.value == "someone-else"
     assert second.interpretation == "unknown"
+
+
+# A02-B01: unusual ownership shapes, each checked against one row of the
+# rest_owner_co_owner_null_v1 representation table.
+
+
+def test_omitted_owner_id_is_unknown_and_recorded_as_omitted() -> None:
+    # Policy row "omitted field": unknown coverage, never normalized to null or empty.
+    omitted = row(8)
+    del omitted["owner_id"]
+    result = evaluate([row(7, U), omitted])
+    assert result.status == "selection_required"
+    second = result.evidence.row_evidence[1]
+    assert second.owner_id.state == "omitted"
+    assert second.interpretation == "unknown"
+    assert evaluate([row(7), omitted]).status == "association_unavailable"
+
+
+def test_empty_co_owners_list_is_known_empty() -> None:
+    # Policy row "[]": an observed empty list, so it does not block coverage.
+    assert evaluate([row(7), row(8, co_owners=[])]).status == "roster_not_found"
+    result = evaluate([row(7, U, co_owners=[]), row(8, co_owners=[])])
+    assert result.status == "selected"
+    assert result.evidence.selected is not None
+    assert result.evidence.selected.match == "owner"
+
+
+@pytest.mark.parametrize("owner", ["", " test-league-mate ", f" {U} "])
+def test_blank_or_padded_owner_id_is_invalid(owner: str) -> None:
+    # Policy row "wrong type or malformed": never trimmed into a match.
+    result = evaluate([row(7), row(8, owner)])
+    assert result.status == "invalid_source_data"
+    assert result.evidence.row_evidence[1].interpretation == "invalid"
+
+
+def test_null_owner_with_listed_co_owner_is_positive() -> None:
+    # Policy rule 3: membership in a well-formed list is positive evidence, and it outranks the
+    # same row's unknown owner field. The unknown field still blocks automatic uniqueness.
+    rows = [row(7, None, co_owners=[U]), row(8)]
+    result = evaluate(rows)
+    assert result.status == "selection_required"
+    assert result.evidence.row_evidence[0].interpretation == "positive"
+    assert [(c.roster_id, c.match) for c in result.evidence.candidates] == [(7, "co_owner")]
+    explicit = evaluate(rows, explicit=7)
+    assert explicit.status == "selected"
+    assert explicit.evidence.selected is not None
+    assert explicit.evidence.selected.match == "co_owner"
+
+
+def test_mixed_co_owners_list_containing_the_user_is_invalid_not_positive() -> None:
+    # Policy row "wrong type or malformed": a list with a non-string member is not interpreted.
+    result = evaluate([row(7, "x", co_owners=[U, 5]), row(8)])
+    assert result.status == "invalid_source_data"
+    assert result.evidence.candidates == []
+    assert result.evidence.row_evidence[0].interpretation == "invalid"
+
+
+def test_identical_duplicate_rows_are_a_structural_defect() -> None:
+    # Policy rule 2 rejects any duplicate roster ID; this is stricter than "conflicting
+    # duplicates", because an identical copy still means the list is not one clean enumeration.
+    result = evaluate([row(7, U), row(7, U)])
+    assert result.status == "invalid_source_data"
+    assert result.evidence.enumeration.structural_defects == ["roster_id 7 appears more than once"]
+
+
+def test_zero_owner_id_is_a_known_non_match() -> None:
+    # Policy rule 3 matches exact strings only. Whether "0" marks an unclaimed team is open, but
+    # it is never the requested user, so it counts as known non-matching evidence.
+    assert evaluate([row(7), row(8, "0")]).status == "roster_not_found"
+    result = evaluate([row(7, U), row(8, "0")])
+    assert result.status == "selected"
+    assert result.evidence.uniqueness == "supported"
