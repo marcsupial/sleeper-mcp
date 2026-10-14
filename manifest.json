@@ -1,0 +1,51 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/mcpb/main/schemas/mcpb-manifest-v0.4.schema.json",
+  "manifest_version": "0.4",
+  "name": "sleeper-mcp",
+  "display_name": "Sleeper (read-only)",
+  "version": "0.1.0",
+  "description": "Read-only lineup context for Sleeper fantasy football leagues",
+  "long_description": "Lets Claude read a Sleeper league's rules, your roster and a week's starting lineup so it can help you review them. Read-only: it only calls Sleeper's public read API and never changes a lineup, roster, league or account. Not affiliated with Sleeper.",
+  "author": {
+    "name": "marcsupial",
+    "url": "https://github.com/marcsupial"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marcsupial/sleeper-mcp.git"
+  },
+  "homepage": "https://github.com/marcsupial/sleeper-mcp",
+  "support": "https://github.com/marcsupial/sleeper-mcp/issues",
+  "license": "MIT",
+  "keywords": ["sleeper", "fantasy football", "nfl", "lineup"],
+  "privacy_policies": ["https://sleeper.com/privacy"],
+  "server": {
+    "type": "uv",
+    "entry_point": "src/sleeper_mcp/__main__.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "--frozen", "python", "-m", "sleeper_mcp"],
+      "env": {
+        "SLEEPER_MCP_SCOPE_REGISTRY": "${user_config.scope_registry}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "get_lineup_context",
+      "description": "Returns one league's rules, the user's roster with each player's placement, and the starting lineup for one week."
+    }
+  ],
+  "user_config": {
+    "scope_registry": {
+      "type": "file",
+      "title": "Scope registry",
+      "description": "Optional JSON file listing the leagues this server supports. Without it every request returns unsupported_scope.",
+      "required": false,
+      "default": ""
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "linux"]
+  }
+}

@@ -31,3 +31,6 @@ htmlcov/
 # Claude Code personal files
 CLAUDE.local.md
 .claude/settings.local.json
+
+# MCPB bundles (built with `npx @anthropic-ai/mcpb pack`)
+*.mcpb
