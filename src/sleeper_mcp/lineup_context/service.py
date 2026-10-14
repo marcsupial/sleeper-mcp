@@ -72,7 +72,13 @@ from sleeper_mcp.lineup_context.target import (
     source_failure_issue,
 )
 from sleeper_mcp.lineup_context.views import compare_views
-from sleeper_mcp.scope import NoRegistry, ScopeRegistry, Target, Unregistered
+from sleeper_mcp.scope import (
+    STRUCTURAL_WEEK_DOMAIN,
+    NoRegistry,
+    ScopeRegistry,
+    Target,
+    Unregistered,
+)
 from sleeper_mcp.sleeper import routes
 from sleeper_mcp.sleeper.directory import DirectoryResult, PlayerDirectoryStore
 from sleeper_mcp.sleeper.fetch import CallBudget, Clock, Fetcher
@@ -188,7 +194,7 @@ def _empty_association(roster_id: int | None) -> AssociationEvidence:
 
 def _assemble(call: _Call, context: Context | None, selection_required: bool) -> LineupContextV1:
     request = call.request
-    scope = call.scope or base_scope(None, None, registry=False)
+    scope = call.scope or base_scope(None, None, registry="absent")
     outcome = combine(call.issues, selection_required)
     resolved_keys = ("user_id", "league_id", "roster_id", "sport", "season", "season_type", "week")
     resolved = {key: call.resolved.get(key) for key in resolved_keys}
@@ -248,48 +254,54 @@ async def _run(runtime: Runtime, arguments: dict[str, RawArgument]) -> LineupCon
     if request is None:
         return _assemble(call, None, False)
 
-    # 1. Scope, without any network request.
+    # 1. Scope, without any network request. Unregistered leagues are checked structurally once
+    # the league is fetched; a refused registry or an excluded league stops here.
     registry = runtime.registry
+    target: Target | None = None
     if isinstance(registry, NoRegistry):
-        call.scope = base_scope(None, None, registry=False)
-        call.issues.append(
-            IssueSpec(
-                reason="unsupported_scope",
-                severity="error",
-                explanation="No scope registry is configured (or the configured one was "
-                "refused), so no league is supported. Set SLEEPER_MCP_SCOPE_REGISTRY.",
-                affected=[("input", "league_id")],
-                cause="registry_absent",
-                next_action=None,
-                retryable=False,
-                stage="input",
+        if registry.reason == "refused":
+            call.scope = base_scope(None, None, registry="refused")
+            call.issues.append(
+                IssueSpec(
+                    reason="unsupported_scope",
+                    severity="error",
+                    explanation="The configured scope registry was refused (see the server log), "
+                    "so no league is supported. Fix or unset SLEEPER_MCP_SCOPE_REGISTRY.",
+                    affected=[("input", "league_id")],
+                    cause="registry_refused",
+                    next_action=None,
+                    retryable=False,
+                    stage="input",
+                )
             )
-        )
-        return _assemble(call, None, False)
-    found = registry.lookup(request.league_id)
-    if isinstance(found, Unregistered):
-        call.scope = base_scope(None, registry.extension_id, registry=True).model_copy(
-            update={"target": found.kind}
-        )
-        call.issues.append(
-            IssueSpec(
-                reason="unsupported_scope",
-                severity="error",
-                explanation="This league is not one of the registered supported "
-                "league/season/configuration instances.",
-                affected=[("input", "league_id")],
-                cause="league_not_registered",
-                next_action=None,
-                retryable=False,
-                stage="input",
+            return _assemble(call, None, False)
+        call.scope = base_scope(None, None, registry="absent")
+    else:
+        found = registry.lookup(request.league_id)
+        if found == Unregistered("unsupported_comparison"):
+            call.scope = base_scope(None, registry.extension_id, registry="configured").model_copy(
+                update={"target": "unsupported_comparison"}
             )
-        )
-        return _assemble(call, None, False)
-    target = found
-    call.target = target
-    call.scope = base_scope(target, registry.extension_id, registry=True)
+            call.issues.append(
+                IssueSpec(
+                    reason="unsupported_scope",
+                    severity="error",
+                    explanation="The configured scope registry excludes this league.",
+                    affected=[("input", "league_id")],
+                    cause="league_excluded",
+                    next_action=None,
+                    retryable=False,
+                    stage="input",
+                )
+            )
+            return _assemble(call, None, False)
+        if isinstance(found, Target):
+            target = found
+            call.target = target
+        call.scope = base_scope(target, registry.extension_id, registry="configured")
     if request.week is not None:
-        problem = week_domain_issue(request.week, target.week_domain)
+        domain = target.week_domain if target else STRUCTURAL_WEEK_DOMAIN
+        problem = week_domain_issue(request.week, domain)
         if problem is not None:
             call.issues.append(problem)
             return _assemble(call, None, False)
@@ -317,6 +329,8 @@ async def _run(runtime: Runtime, arguments: dict[str, RawArgument]) -> LineupCon
     call.league = league_result.evidence
     call.issues += league_result.issues
     league = league_result.league
+    target = league_result.target
+    call.target = target
     if league is not None:
         call.resolved.update(
             league_id=request.league_id,
@@ -324,7 +338,7 @@ async def _run(runtime: Runtime, arguments: dict[str, RawArgument]) -> LineupCon
             season=league["season"],
             season_type=league["season_type"],
         )
-    if user_evidence.status != "resolved" or league is None:
+    if user_evidence.status != "resolved" or league is None or target is None:
         return _assemble(call, None, False)
 
     # 3. Rosters, plus NFL state when the week is automatic.

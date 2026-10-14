@@ -1,7 +1,8 @@
-"""The supported-scope registry (D1/D2).
+"""Supported scope: structural rules, plus an optional private registry of pinned leagues.
 
-The registry is private runtime data, never code. Without a valid registry every request is
-`unsupported_scope`.
+A league is supported structurally when its live settings meet the STRUCTURAL_* rules and every
+starting slot has a slot rule. A registry, when configured, pins exact instances (which then must
+match their entry) and can exclude leagues. A configured registry that is refused supports nothing.
 """
 
 from __future__ import annotations
@@ -38,6 +39,17 @@ MappingBasis = Literal[
 ]
 
 
+TargetBasis = Literal["registered", "structural_match"]
+
+STRUCTURAL_SPORT = "nfl"
+STRUCTURAL_SEASON_TYPE = "regular"
+STRUCTURAL_BEST_BALL = 0
+STRUCTURAL_WEEK_DOMAIN = (1, 18)
+# Sleeper's league status for a finished season. Such a league keeps only its latest settings, so
+# it gets the rules accepted for the 2023 archive: explicit week, retained-configuration basis.
+COMPLETED_LEAGUE_STATUS = "complete"
+
+
 class RegistryError(Exception):
     pass
 
@@ -53,6 +65,28 @@ class Target:
     week_domain: tuple[int, int]
     automatic_week: AutomaticWeek
     mapping_basis: MappingBasis
+    basis: TargetBasis = "registered"
+
+
+def structural_target(
+    league_id: str, season: str, starting_configuration: tuple[str, ...], status: object
+) -> Target:
+    """The target for a league whose live settings already passed the structural rules."""
+    completed = status == COMPLETED_LEAGUE_STATUS
+    return Target(
+        league_id=league_id,
+        season=season,
+        sport=STRUCTURAL_SPORT,
+        season_type=STRUCTURAL_SEASON_TYPE,
+        best_ball=STRUCTURAL_BEST_BALL,
+        starting_configuration=starting_configuration,
+        week_domain=STRUCTURAL_WEEK_DOMAIN,
+        automatic_week="explicit_week_only" if completed else "agreeing_same_season_four_signals",
+        mapping_basis="retained_selected_league_configuration_observed_view"
+        if completed
+        else "observed_selected_configuration",
+        basis="structural_match",
+    )
 
 
 @dataclass(frozen=True)
@@ -78,7 +112,7 @@ class Unregistered:
 
 @dataclass(frozen=True)
 class NoRegistry:
-    """No registry is configured, or the configured one was refused."""
+    """No registry is configured (structural scope only), or the configured one was refused."""
 
     reason: Literal["not_configured", "refused"]
 
@@ -218,7 +252,7 @@ def load_registry(
 ) -> ScopeRegistry | NoRegistry:
     """Load the registry, or explain (in the log, without identifiers) why none is in use."""
     if path is None:
-        logger.info("No scope registry configured; every request will be unsupported_scope.")
+        logger.info("No scope registry configured; leagues are checked structurally.")
         return NoRegistry("not_configured")
     try:
         registry = parse_registry(strict_json_loads(path.read_bytes()), controls)
